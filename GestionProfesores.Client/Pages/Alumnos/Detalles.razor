@@ -1,0 +1,513 @@
+﻿@page "/alumnos/detalles/{id:int}"
+@using GestionProfesores.Shared.DTO
+@using GestionProfesores.Client.Servicios
+@inject IAlumnoServicio AlumnoServicio
+@inject IAsistenciaServicio AsistenciaServicio
+@inject INotaServicio NotaServicio
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Detalles del Alumno</PageTitle>
+
+<h3>Detalles del Alumno</h3>
+
+@if (cargando)
+{
+    <div class="text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+        </div>
+    </div>
+}
+else if (alumno == null)
+{
+    <div class="alert alert-danger">
+        Alumno no encontrado
+    </div>
+}
+else
+{
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">
+                <i class="bi bi-person"></i>
+                @alumno.Nombre @alumno.Apellido
+            </h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>ID:</strong> @alumno.Id</p>
+                    <p><strong>Nombre:</strong> @alumno.Nombre</p>
+                    <p><strong>Apellido:</strong> @alumno.Apellido</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Total Asistencias:</strong> @asistencias.Count</p>
+                    <p><strong>Total Notas:</strong> @notas.Count</p>
+                    <p><strong>Promedio General:</strong> @(promedioGeneral?.ToString("0.00") ?? "N/A")</p>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer">
+            <button class="btn btn-secondary" @onclick="Volver">
+                <i class="bi bi-arrow-left"></i> Volver
+            </button>
+            <button class="btn btn-primary ms-2" @onclick="@(() => EditarAlumno(alumno.Id))">
+                <i class="bi bi-pencil"></i> Editar
+            </button>
+        </div>
+    </div>
+
+    <!-- Pestañas para Asistencias y Notas -->
+    <ul class="nav nav-tabs" id="alumnoTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(tabActiva == "asistencias" ? "active" : "")"
+                    id="asistencias-tab"
+                    @onclick="@(() => CambiarTab("asistencias"))">
+                <i class="bi bi-calendar-check"></i> Asistencias (@asistencias.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(tabActiva == "notas" ? "active" : "")"
+                    id="notas-tab"
+                    @onclick="@(() => CambiarTab("notas"))">
+                <i class="bi bi-journal-text"></i> Notas (@notas.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(tabActiva == "resumen" ? "active" : "")"
+                    id="resumen-tab"
+                    @onclick="@(() => CambiarTab("resumen"))">
+                <i class="bi bi-graph-up"></i> Resumen
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-3" id="alumnoTabsContent">
+        <!-- Tab de Asistencias -->
+        <div class="tab-pane @(tabActiva == "asistencias" ? "show active" : "")">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5><i class="bi bi-calendar-check"></i> Historial de Asistencias</h5>
+                <div class="btn-group">
+                    <button class="btn btn-outline-primary btn-sm" @onclick="ExportarAsistencias">
+                        <i class="bi bi-download"></i> Exportar
+                    </button>
+                </div>
+            </div>
+
+            @if (asistencias.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Materia</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var asistencia in asistencias.OrderByDescending(a => a.Fecha))
+                            {
+                                <tr>
+                                    <td>@asistencia.Fecha.ToString("dd/MM/yyyy")</td>
+                                    <td>
+                                        @if (asistencia.Materia != null)
+                                        {
+                                            @asistencia.Materia.Nombre
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">N/A</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (asistencia.Presente)
+                                        {
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle"></i> Presente
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-x-circle"></i> Ausente
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-info"
+                                                @onclick="@(() => VerDetalleAsistencia(asistencia.Id))"
+                                                title="Ver detalles">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">Resumen de Asistencias</h6>
+                                <p>Presentes: <span class="badge bg-success">@asistencias.Count(a => a.Presente)</span></p>
+                                <p>Ausentes: <span class="badge bg-danger">@asistencias.Count(a => !a.Presente)</span></p>
+                                <p>Porcentaje de Asistencia: <span class="badge bg-info">@(CalcularPorcentajeAsistencia())%</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No hay asistencias registradas para este alumno.
+                </div>
+            }
+        </div>
+
+        <!-- Tab de Notas -->
+        <div class="tab-pane @(tabActiva == "notas" ? "show active" : "")">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5><i class="bi bi-journal-text"></i> Historial de Notas</h5>
+                <div class="btn-group">
+                    <button class="btn btn-outline-primary btn-sm" @onclick="ExportarNotas">
+                        <i class="bi bi-download"></i> Exportar
+                    </button>
+                </div>
+            </div>
+
+            @if (notas.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Materia</th>
+                                <th>Nota</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var nota in notas.OrderByDescending(n => n.Fecha))
+                            {
+                                var estadoNota = ObtenerEstadoNota(nota.Valor);
+                                <tr>
+                                    <td>@nota.Fecha.ToString("dd/MM/yyyy")</td>
+                                    <td>
+                                        @if (nota.Materia != null)
+                                        {
+                                            @nota.Materia.Nombre
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">N/A</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold">@nota.Valor.ToString("0.00")</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge @estadoNota.bgColor">
+                                            @estadoNota.texto
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-info"
+                                                @onclick="@(() => VerDetalleNota(nota.Id))"
+                                                title="Ver detalles">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">Resumen de Notas</h6>
+                                <p>Nota más alta: <span class="badge bg-success">@notas.Max(n => n.Valor).ToString("0.00")</span></p>
+                                <p>Nota más baja: <span class="badge bg-danger">@notas.Min(n => n.Valor).ToString("0.00")</span></p>
+                                <p>Promedio general: <span class="badge bg-primary">@(promedioGeneral?.ToString("0.00") ?? "N/A")</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No hay notas registradas para este alumno.
+                </div>
+            }
+        </div>
+
+        <!-- Tab de Resumen -->
+        <div class="tab-pane @(tabActiva == "resumen" ? "show active" : "")">
+            <h5><i class="bi bi-graph-up"></i> Resumen Académico</h5>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0"><i class="bi bi-check-circle"></i> Asistencia</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div class="progress-bar bg-success" role="progressbar"
+                                     style="width: @(CalcularPorcentajeAsistencia())%"
+                                     aria-valuenow="@(CalcularPorcentajeAsistencia())"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    @(CalcularPorcentajeAsistencia())%
+                                </div>
+                            </div>
+                            <p class="mb-1">Presentes: @asistencias.Count(a => a.Presente)</p>
+                            <p class="mb-1">Ausentes: @asistencias.Count(a => !a.Presente)</p>
+                            <p class="mb-0">Total: @asistencias.Count</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header bg-warning text-white">
+                            <h6 class="mb-0"><i class="bi bi-journal-text"></i> Rendimiento</h6>
+                        </div>
+                        <div class="card-body">
+                            <h2 class="text-center mb-3">@(promedioGeneral?.ToString("0.00") ?? "N/A")</h2>
+                            <p class="mb-1">Notas registradas: @notas.Count</p>
+                            <p class="mb-1">Nota más alta: @(notas.Any() ? notas.Max(n => n.Valor).ToString("0.00") : "N/A")</p>
+                            <p class="mb-0">Nota más baja: @(notas.Any() ? notas.Min(n => n.Valor).ToString("0.00") : "N/A")</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="bi bi-list-check"></i> Resumen por Materia</h6>
+                </div>
+                <div class="card-body">
+                    @if (resumenMaterias.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Materia</th>
+                                        <th>Promedio</th>
+                                        <th>Notas</th>
+                                        <th>Asistencias</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var materia in resumenMaterias)
+                                    {
+                                        <tr>
+                                            <td>@materia.MateriaNombre</td>
+                                            <td>
+                                                <span class="badge @(materia.Promedio >= 6 ? "bg-success" : "bg-danger")">
+                                                    @materia.Promedio.ToString("0.00")
+                                                </span>
+                                            </td>
+                                            <td>@materia.TotalNotas</td>
+                                            <td>
+                                                @materia.Presentes / @materia.TotalAsistencias
+                                                <span class="badge bg-info">@(materia.PorcentajeAsistencia)%</span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info">
+                            No hay datos suficientes para generar el resumen por materia.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private AlumnoDTO? alumno = null;
+    private List<AsistenciaDTO> asistencias = new();
+    private List<NotaDTO> notas = new();
+    private List<MateriaResumen> resumenMaterias = new();
+    private bool cargando = true;
+    private string tabActiva = "asistencias";
+    private decimal? promedioGeneral = null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarDatosAlumno();
+    }
+
+    private async Task CargarDatosAlumno()
+    {
+        cargando = true;
+        StateHasChanged();
+
+        try
+        {
+            // Cargar datos del alumno
+            var respuestaAlumno = await AlumnoServicio.GetAlumno(Id);
+            if (!respuestaAlumno.Error && respuestaAlumno.Respuesta != null)
+            {
+                alumno = respuestaAlumno.Respuesta;
+            }
+
+            // Cargar asistencias del alumno
+            var respuestaAsistencias = await AsistenciaServicio.GetAsistenciasByAlumno(Id);
+            if (!respuestaAsistencias.Error && respuestaAsistencias.Respuesta != null)
+            {
+                asistencias = respuestaAsistencias.Respuesta;
+            }
+
+            // Cargar notas del alumno
+            var respuestaNotas = await NotaServicio.GetNotasByAlumno(Id);
+            if (!respuestaNotas.Error && respuestaNotas.Respuesta != null)
+            {
+                notas = respuestaNotas.Respuesta;
+            }
+
+            // Calcular promedio general
+            if (notas.Any())
+            {
+                promedioGeneral = notas.Average(n => n.Valor);
+            }
+
+            // Generar resumen por materia
+            GenerarResumenMaterias();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar datos: {ex.Message}");
+        }
+
+        cargando = false;
+        StateHasChanged();
+    }
+
+    private void GenerarResumenMaterias()
+    {
+        resumenMaterias.Clear();
+
+        // Agrupar notas por materia
+        var notasPorMateria = notas
+            .Where(n => n.Materia != null)
+            .GroupBy(n => new { n.MateriaId, MateriaNombre = n.Materia?.Nombre ?? "Sin nombre" });
+
+        foreach (var grupo in notasPorMateria)
+        {
+            var materiaId = grupo.Key.MateriaId;
+            var materiaNombre = grupo.Key.MateriaNombre;
+            var promedio = grupo.Average(n => n.Valor);
+            var totalNotas = grupo.Count();
+
+            // Contar asistencias para esta materia
+            var asistenciasMateria = asistencias
+                .Where(a => a.MateriaId == materiaId)
+                .ToList();
+
+            var presentes = asistenciasMateria.Count(a => a.Presente);
+            var totalAsistencias = asistenciasMateria.Count;
+            var porcentajeAsistencia = totalAsistencias > 0 ? (presentes * 100) / totalAsistencias : 0;
+
+            resumenMaterias.Add(new MateriaResumen
+            {
+                MateriaId = materiaId,
+                MateriaNombre = materiaNombre,
+                Promedio = promedio,
+                TotalNotas = totalNotas,
+                Presentes = presentes,
+                TotalAsistencias = totalAsistencias,
+                PorcentajeAsistencia = porcentajeAsistencia
+            });
+        }
+    }
+
+    private decimal CalcularPorcentajeAsistencia()
+    {
+        if (!asistencias.Any()) return 0;
+        var presentes = asistencias.Count(a => a.Presente);
+        return Math.Round((presentes * 100m) / asistencias.Count, 2);
+    }
+
+    private (string bgColor, string texto) ObtenerEstadoNota(decimal valor)
+    {
+        if (valor >= 8) return ("bg-success", "Excelente");
+        if (valor >= 6) return ("bg-info", "Aprobado");
+        if (valor >= 4) return ("bg-warning", "Regular");
+        return ("bg-danger", "Reprobado");
+    }
+
+    private void CambiarTab(string tab)
+    {
+        tabActiva = tab;
+        StateHasChanged();
+    }
+
+    private void Volver()
+    {
+        NavigationManager.NavigateTo("/alumnos");
+    }
+
+    private void EditarAlumno(int id)
+    {
+        NavigationManager.NavigateTo($"/alumnos/editar/{id}");
+    }
+
+    private void VerDetalleAsistencia(int id)
+    {
+        // Aquí puedes navegar a una página de detalle de asistencia si la creas
+        Console.WriteLine($"Ver detalle asistencia {id}");
+    }
+
+    private void VerDetalleNota(int id)
+    {
+        // Aquí puedes navegar a una página de detalle de nota si la creas
+        Console.WriteLine($"Ver detalle nota {id}");
+    }
+
+    private async Task ExportarAsistencias()
+    {
+        // Implementar exportación a CSV o PDF
+        await JSRuntime.InvokeVoidAsync("alert", "Función de exportación en desarrollo");
+    }
+
+    private async Task ExportarNotas()
+    {
+        // Implementar exportación a CSV o PDF
+        await JSRuntime.InvokeVoidAsync("alert", "Función de exportación en desarrollo");
+    }
+
+    // Clase para el resumen por materia
+    private class MateriaResumen
+    {
+        public int MateriaId { get; set; }
+        public string MateriaNombre { get; set; } = string.Empty;
+        public decimal Promedio { get; set; }
+        public int TotalNotas { get; set; }
+        public int Presentes { get; set; }
+        public int TotalAsistencias { get; set; }
+        public decimal PorcentajeAsistencia { get; set; }
+    }
+}

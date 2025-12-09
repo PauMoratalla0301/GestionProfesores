@@ -41,13 +41,13 @@ else
                     <td>@alumno.Apellido</td>
                     <td>
                         <button class="btn btn-sm btn-info me-1" @onclick="() => VerDetalles(alumno.Id)">
-                            Detalles
+                            <i class="bi bi-eye"></i> Detalles
                         </button>
                         <button class="btn btn-sm btn-warning me-1" @onclick="() => EditarAlumno(alumno.Id)">
-                            Editar
+                            <i class="bi bi-pencil"></i> Editar
                         </button>
                         <button class="btn btn-sm btn-danger" @onclick="() => EliminarAlumno(alumno.Id)">
-                            Eliminar
+                            <i class="bi bi-trash"></i> Eliminar
                         </button>
                     </td>
                 </tr>
