@@ -1,0 +1,104 @@
+﻿@page "/alumnos/nuevo"
+@page "/alumnos/editar/{id:int}"
+@using GestionProfesores.Shared.DTO
+@using GestionProfesores.Client.Servicios
+@inject IAlumnoServicio AlumnoServicio
+@inject NavigationManager NavigationManager
+
+<PageTitle>@TituloPagina</PageTitle>
+
+<h3>@TituloPagina</h3>
+
+<EditForm Model="@alumno" OnValidSubmit="@Guardar">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label for="nombre" class="form-label">Nombre</label>
+        <InputText id="nombre" class="form-control" @bind-Value="alumno.Nombre" />
+        <ValidationMessage For="@(() => alumno.Nombre)" />
+    </div>
+
+    <div class="mb-3">
+        <label for="apellido" class="form-label">Apellido</label>
+        <InputText id="apellido" class="form-control" @bind-Value="alumno.Apellido" />
+        <ValidationMessage For="@(() => alumno.Apellido)" />
+    </div>
+
+    <div class="mb-3">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-secondary ms-2" @onclick="Cancelar">Cancelar</button>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private CrearAlumnoDTO alumno = new();
+    private string TituloPagina = "Nuevo Alumno";
+    private bool esEdicion = false;
+    private string error = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id > 0)
+        {
+            esEdicion = true;
+            TituloPagina = "Editar Alumno";
+            await CargarAlumno();
+        }
+    }
+
+    private async Task CargarAlumno()
+    {
+        var respuesta = await AlumnoServicio.GetAlumno(Id);
+        if (!respuesta.Error && respuesta.Respuesta != null)
+        {
+            alumno = new CrearAlumnoDTO
+            {
+                Nombre = respuesta.Respuesta.Nombre,
+                Apellido = respuesta.Respuesta.Apellido
+            };
+        }
+    }
+
+    private async Task Guardar()
+    {
+        if (esEdicion)
+        {
+            var alumnoActualizado = new AlumnoDTO
+            {
+                Id = Id,
+                Nombre = alumno.Nombre,
+                Apellido = alumno.Apellido
+            };
+
+            var respuesta = await AlumnoServicio.ActualizarAlumno(alumnoActualizado);
+            if (!respuesta.Error)
+            {
+                NavigationManager.NavigateTo("/alumnos");
+            }
+            else
+            {
+                error = await respuesta.ObtenerError();
+            }
+        }
+        else
+        {
+            var respuesta = await AlumnoServicio.CrearAlumno(alumno);
+            if (!respuesta.Error)
+            {
+                NavigationManager.NavigateTo("/alumnos");
+            }
+            else
+            {
+                error = await respuesta.ObtenerError();
+            }
+        }
+    }
+
+    private void Cancelar()
+    {
+        NavigationManager.NavigateTo("/alumnos");
+    }
+}

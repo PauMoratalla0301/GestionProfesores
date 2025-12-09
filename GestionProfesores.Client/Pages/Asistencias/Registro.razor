@@ -1,0 +1,278 @@
+﻿@page "/asistencias/registro"
+@using GestionProfesores.Shared.DTO
+@using GestionProfesores.Client.Servicios
+@inject IAlumnoServicio AlumnoServicio
+@inject IMateriaServicio MateriaServicio
+@inject IAsistenciaServicio AsistenciaServicio
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Registro de Asistencias</PageTitle>
+
+<h3>Registro de Asistencias</h3>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <label class="form-label">Fecha</label>
+        <InputDate class="form-control" @bind-Value="fechaSeleccionada" />
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Materia</label>
+        <select class="form-control" @bind="materiaSeleccionada">
+            <option value="0">-- Seleccionar Materia --</option>
+            @foreach (var materia in materias)
+            {
+                <option value="@materia.Id">@materia.Nombre</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-4 align-self-end">
+        <button class="btn btn-success" @onclick="CargarAsistenciasExistentes"
+                title="Cargar asistencias ya registradas para esta fecha y materia">
+            <i class="bi bi-arrow-clockwise"></i> Cargar Existentes
+        </button>
+    </div>
+</div>
+
+@if (alumnosCargados && fechaSeleccionada != default && materiaSeleccionada > 0)
+{
+    <div class="alert alert-info mb-3">
+        Registrando asistencias para: <strong>@fechaSeleccionada.ToString("dd/MM/yyyy")</strong>
+        - Materia: <strong>@(materias.FirstOrDefault(m => m.Id == materiaSeleccionada)?.Nombre ?? "")</strong>
+    </div>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Alumno</th>
+                <th>Asistencia</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var alumno in alumnos)
+            {
+                <tr>
+                    <td>@alumno.Nombre @alumno.Apellido</td>
+                    <td>
+                        <select class="form-select"
+                                value="@(asistenciasDict.ContainsKey(alumno.Id) ? asistenciasDict[alumno.Id].ToString().ToLower() : "true")"
+                                @onchange="@(e => ActualizarAsistencia(alumno.Id, e))">
+                            <option value="true">✅ Presente</option>
+                            <option value="false">❌ Ausente</option>
+                        </select>
+                        <small class="text-muted d-block mt-1">
+                            @if (asistenciasDict.ContainsKey(alumno.Id))
+                            {
+                                <span>Estado: @(asistenciasDict[alumno.Id] ? "Presente" : "Ausente")</span>
+                            }
+                        </small>
+                    </td>
+                    <td>
+                        <button class="btn btn-primary btn-sm" @onclick="() => GuardarAsistencia(alumno.Id)">
+                            <i class="bi bi-save"></i> Guardar
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="text-center mt-4">
+        <button class="btn btn-success btn-lg" @onclick="RegistrarTodas">
+            <i class="bi bi-check-all"></i> Registrar Todas las Asistencias
+        </button>
+    </div>
+}
+else if (alumnosCargados)
+{
+    <div class="alert alert-warning">
+        Por favor, selecciona una materia para registrar asistencias.
+    </div>
+}
+
+@code {
+    private List<AlumnoDTO> alumnos = new();
+    private List<MateriaDTO> materias = new();
+    private DateOnly fechaSeleccionada = DateOnly.FromDateTime(DateTime.Now);
+    private int materiaSeleccionada = 0;
+    private Dictionary<int, bool> asistenciasDict = new();
+    private bool alumnosCargados = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAlumnos();
+        await CargarMaterias();
+    }
+
+    private async Task CargarAlumnos()
+    {
+        try
+        {
+            var respuesta = await AlumnoServicio.GetAlumnos();
+            if (!respuesta.Error && respuesta.Respuesta != null)
+            {
+                alumnos = respuesta.Respuesta;
+                alumnosCargados = true;
+
+                // Inicializar diccionario de asistencias
+                foreach (var alumno in alumnos)
+                {
+                    asistenciasDict[alumno.Id] = true; // Por defecto presente
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error al cargar alumnos: {ex.Message}");
+        }
+    }
+
+    private async Task CargarMaterias()
+    {
+        try
+        {
+            var respuesta = await MateriaServicio.GetMaterias();
+            if (!respuesta.Error && respuesta.Respuesta != null)
+            {
+                materias = respuesta.Respuesta;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error al cargar materias: {ex.Message}");
+        }
+    }
+
+    private void ActualizarAsistencia(int alumnoId, ChangeEventArgs e)
+    {
+        if (bool.TryParse(e.Value?.ToString(), out bool nuevaAsistencia))
+        {
+            asistenciasDict[alumnoId] = nuevaAsistencia;
+            StateHasChanged(); // Esto hace que se actualice la vista
+        }
+    }
+
+    private async Task GuardarAsistencia(int alumnoId)
+    {
+        if (materiaSeleccionada == 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Por favor, selecciona una materia primero");
+            return;
+        }
+
+        try
+        {
+            var asistencia = new CrearAsistenciaDTO
+            {
+                AlumnoId = alumnoId,
+                MateriaId = materiaSeleccionada,
+                Fecha = fechaSeleccionada,
+                Presente = asistenciasDict.ContainsKey(alumnoId) ? asistenciasDict[alumnoId] : true
+            };
+
+            var respuesta = await AsistenciaServicio.CrearAsistencia(asistencia);
+            if (!respuesta.Error)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Asistencia de {alumnos.First(a => a.Id == alumnoId).Nombre} registrada correctamente");
+            }
+            else
+            {
+                var error = await respuesta.ObtenerError();
+                await JSRuntime.InvokeVoidAsync("alert", $"Error: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+
+    private async Task RegistrarTodas()
+    {
+        if (materiaSeleccionada == 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Por favor, selecciona una materia primero");
+            return;
+        }
+
+        if (!await JSRuntime.InvokeAsync<bool>("confirm",
+            $"¿Está seguro de registrar todas las asistencias para esta fecha?"))
+        {
+            return;
+        }
+
+        int exitosas = 0;
+        int errores = 0;
+
+        foreach (var alumno in alumnos)
+        {
+            try
+            {
+                var asistencia = new CrearAsistenciaDTO
+                {
+                    AlumnoId = alumno.Id,
+                    MateriaId = materiaSeleccionada,
+                    Fecha = fechaSeleccionada,
+                    Presente = asistenciasDict.ContainsKey(alumno.Id) ? asistenciasDict[alumno.Id] : true
+                };
+
+                var respuesta = await AsistenciaServicio.CrearAsistencia(asistencia);
+                if (!respuesta.Error)
+                {
+                    exitosas++;
+                }
+                else
+                {
+                    errores++;
+                }
+            }
+            catch
+            {
+                errores++;
+            }
+        }
+
+        await JSRuntime.InvokeVoidAsync("alert",
+            $"Registro completado:\n{exitosas} asistencias registradas exitosamente\n{errores} errores");
+    }
+
+    private async Task CargarAsistenciasExistentes()
+    {
+        if (materiaSeleccionada == 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Por favor, selecciona una materia primero");
+            return;
+        }
+
+        try
+        {
+            var respuesta = await AsistenciaServicio.GetAsistenciasByFecha(fechaSeleccionada);
+            if (!respuesta.Error && respuesta.Respuesta != null)
+            {
+                var asistenciasExistentes = respuesta.Respuesta
+                    .Where(a => a.MateriaId == materiaSeleccionada)
+                    .ToList();
+
+                foreach (var asistencia in asistenciasExistentes)
+                {
+                    if (asistenciasDict.ContainsKey(asistencia.AlumnoId))
+                    {
+                        asistenciasDict[asistencia.AlumnoId] = asistencia.Presente;
+                    }
+                }
+
+                StateHasChanged();
+                await JSRuntime.InvokeVoidAsync("alert",
+                    $"Se cargaron {asistenciasExistentes.Count} asistencias existentes para esta fecha");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "No hay asistencias registradas para esta fecha y materia");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error al cargar asistencias existentes: {ex.Message}");
+        }
+    }
+}

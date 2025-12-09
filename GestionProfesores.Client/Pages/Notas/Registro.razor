@@ -1,0 +1,207 @@
+﻿@page "/notas/registro"
+@using GestionProfesores.Shared.DTO
+@using GestionProfesores.Client.Servicios
+@inject IAlumnoServicio AlumnoServicio
+@inject IMateriaServicio MateriaServicio
+@inject INotaServicio NotaServicio
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Registro de Notas</PageTitle>
+
+<h3>Registro de Notas</h3>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <label class="form-label">Alumno</label>
+        <select class="form-control" @bind="alumnoSeleccionado" @bind="OnAlumnoCambiado">
+            <option value="0">-- Seleccionar Alumno --</option>
+            @foreach (var alumno in alumnos)
+            {
+                <option value="@alumno.Id">@alumno.Nombre @alumno.Apellido</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Materia</label>
+        <select class="form-control" @bind="materiaSeleccionada" @bind="OnMateriaCambiada">
+            <option value="0">-- Seleccionar Materia --</option>
+            @foreach (var materia in materias)
+            {
+                <option value="@materia.Id">@materia.Nombre</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (alumnoSeleccionado > 0 && materiaSeleccionada > 0)
+{
+    <div class="card">
+        <div class="card-header">
+            <h5>Nueva Nota</h5>
+        </div>
+        <div class="card-body">
+            <EditForm Model="@nuevaNota" OnValidSubmit="@AgregarNota">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <label class="form-label">Valor</label>
+                        <InputNumber class="form-control" @bind-Value="nuevaNota.Valor" />
+                        <ValidationMessage For="@(() => nuevaNota.Valor)" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Fecha</label>
+                        <InputDate class="form-control" @bind-Value="fechaNota" />
+                    </div>
+                    <div class="col-md-4 align-self-end">
+                        <button type="submit" class="btn btn-primary">Agregar Nota</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h5>Notas Registradas</h5>
+        @if (notasAlumnoMateria.Any())
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Valor</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var nota in notasAlumnoMateria)
+                    {
+                        <tr>
+                            <td>@nota.Fecha.ToString("dd/MM/yyyy")</td>
+                            <td>@nota.Valor</td>
+                            <td>
+                                <button class="btn btn-sm btn-danger" @onclick="() => EliminarNota(nota.Id)">
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            
+            <div class="alert alert-info">
+                <strong>Promedio: </strong> @(promedio?.ToString("0.00") ?? "N/A")
+            </div>
+        }
+        else
+        {
+            <p>No hay notas registradas para este alumno en esta materia.</p>
+        }
+    </div>
+}
+
+@code {
+    private List<AlumnoDTO> alumnos = new();
+    private List<MateriaDTO> materias = new();
+    private List<NotaDTO> notasAlumnoMateria = new();
+    private CrearNotaDTO nuevaNota = new();
+    private DateTime fechaNota = DateTime.Now;
+    private int alumnoSeleccionado = 0;
+    private int materiaSeleccionada = 0;
+    private decimal? promedio = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAlumnos();
+        await CargarMaterias();
+    }
+
+    private async Task CargarAlumnos()
+    {
+        var respuesta = await AlumnoServicio.GetAlumnos();
+        if (!respuesta.Error && respuesta.Respuesta != null)
+        {
+            alumnos = respuesta.Respuesta;
+        }
+    }
+
+    private async Task CargarMaterias()
+    {
+        var respuesta = await MateriaServicio.GetMaterias();
+        if (!respuesta.Error && respuesta.Respuesta != null)
+        {
+            materias = respuesta.Respuesta;
+        }
+    }
+
+    private async Task OnAlumnoCambiado()
+    {
+        await CargarNotasAlumnoMateria();
+        await CargarPromedio();
+    }
+
+    private async Task OnMateriaCambiada()
+    {
+        await CargarNotasAlumnoMateria();
+        await CargarPromedio();
+    }
+
+    private async Task CargarNotasAlumnoMateria()
+    {
+        if (alumnoSeleccionado > 0 && materiaSeleccionada > 0)
+        {
+            var respuesta = await NotaServicio.GetNotasByAlumnoMateria(alumnoSeleccionado, materiaSeleccionada);
+            if (!respuesta.Error && respuesta.Respuesta != null)
+            {
+                notasAlumnoMateria = respuesta.Respuesta;
+            }
+        }
+    }
+
+    private async Task CargarPromedio()
+    {
+        if (alumnoSeleccionado > 0 && materiaSeleccionada > 0)
+        {
+            var respuesta = await NotaServicio.GetPromedioAlumnoMateria(alumnoSeleccionado, materiaSeleccionada);
+            if (!respuesta.Error)
+            {
+                promedio = respuesta.Respuesta;
+            }
+        }
+    }
+
+    private async Task AgregarNota()
+    {
+        nuevaNota.AlumnoId = alumnoSeleccionado;
+        nuevaNota.MateriaId = materiaSeleccionada;
+        nuevaNota.Fecha = DateOnly.FromDateTime(fechaNota);
+
+        var respuesta = await NotaServicio.CrearNota(nuevaNota);
+        if (!respuesta.Error)
+        {
+            nuevaNota = new CrearNotaDTO();
+            fechaNota = DateTime.Now;
+            await CargarNotasAlumnoMateria();
+            await CargarPromedio();
+        }
+        else
+        {
+            var error = await respuesta.ObtenerError();
+            await JSRuntime.InvokeVoidAsync("alert", $"Error: {error}");
+        }
+    }
+
+    private async Task EliminarNota(int notaId)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "¿Está seguro de eliminar esta nota?"))
+        {
+            var respuesta = await NotaServicio.EliminarNota(notaId);
+            if (!respuesta.Error)
+            {
+                await CargarNotasAlumnoMateria();
+                await CargarPromedio();
+            }
+        }
+    }
+}

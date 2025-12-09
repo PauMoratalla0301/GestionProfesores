@@ -1,0 +1,118 @@
+﻿@page "/alumnos"
+@using GestionProfesores.Shared.DTO
+@using GestionProfesores.Client.Servicios
+@inject IAlumnoServicio AlumnoServicio
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Lista de Alumnos</PageTitle>
+
+<h3>Lista de Alumnos</h3>
+
+@if (cargando)
+{
+    <p>Cargando alumnos...</p>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+else
+{
+    <div class="mb-3">
+        <button class="btn btn-primary" @onclick="NuevoAlumno">Nuevo Alumno</button>
+    </div>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var alumno in alumnos)
+            {
+                <tr>
+                    <td>@alumno.Id</td>
+                    <td>@alumno.Nombre</td>
+                    <td>@alumno.Apellido</td>
+                    <td>
+                        <button class="btn btn-sm btn-info me-1" @onclick="() => VerDetalles(alumno.Id)">
+                            Detalles
+                        </button>
+                        <button class="btn btn-sm btn-warning me-1" @onclick="() => EditarAlumno(alumno.Id)">
+                            Editar
+                        </button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => EliminarAlumno(alumno.Id)">
+                            Eliminar
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<AlumnoDTO> alumnos = new();
+    private bool cargando = true;
+    private string error = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAlumnos();
+    }
+
+    private async Task CargarAlumnos()
+    {
+        cargando = true;
+        StateHasChanged();
+
+        var respuesta = await AlumnoServicio.GetAlumnos();
+        if (!respuesta.Error)
+        {
+            alumnos = respuesta.Respuesta ?? new List<AlumnoDTO>();
+        }
+        else
+        {
+            error = await respuesta.ObtenerError();
+        }
+
+        cargando = false;
+        StateHasChanged();
+    }
+
+    private void NuevoAlumno()
+    {
+        NavigationManager.NavigateTo("/alumnos/nuevo");
+    }
+
+    private void VerDetalles(int id)
+    {
+        NavigationManager.NavigateTo($"/alumnos/detalles/{id}");
+    }
+
+    private void EditarAlumno(int id)
+    {
+        NavigationManager.NavigateTo($"/alumnos/editar/{id}");
+    }
+
+    private async Task EliminarAlumno(int id)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "¿Está seguro de eliminar este alumno?"))
+        {
+            var respuesta = await AlumnoServicio.EliminarAlumno(id);
+            if (!respuesta.Error)
+            {
+                await CargarAlumnos();
+            }
+            else
+            {
+                error = await respuesta.ObtenerError();
+            }
+        }
+    }
+}
